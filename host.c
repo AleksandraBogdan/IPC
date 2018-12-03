@@ -19,18 +19,19 @@ int wolfOrGoat(int live)
 	if (!live)
 	{
 		B = 50;
+		printf("DEAD\n");
 	}
 	return A + rand() % (B - A + 1);
 
 }
 
-void childFunction(int i, int* shared, int status, int seed, sem_t* sem, char* nameSem, sem_t* semParent)
+void childFunction(int i, int* shared, int* status, int seed, sem_t* sem, char* nameSem, sem_t* semParent)
 {
 	while(1)
 	{
 		printf("child func work %i\n", i);
 		srand(seed);
-		shared[i] = wolfOrGoat(status);
+		shared[i] = wolfOrGoat(*status);
 		printf("Goat's number for %i is %i\n", i, shared[i]);
 		sem_wait(sem);
 		sem_post(semParent);
@@ -50,7 +51,7 @@ void parentFunction(sem_t* semParent, sem_t* sem[], char* nameSem[], int* shared
 
 		for (i = 0; i < COUNT_OF_GOATS; i++)
 		{ 
-			printf("sem wait\n");
+			//printf("sem wait\n");
       		sem_post(sem[i]);//to do with time
       		sem_wait(semParent);
  		}
@@ -148,7 +149,7 @@ int main(void)
 	  	}
 	  	else if (!pid)
 	  	{
-	  		childFunction(i, shared, status[i], randSeed[i], sem[i], namesSemaphores[i], semParent);
+	  		childFunction(i, shared, &status[i], randSeed[i], sem[i], namesSemaphores[i], semParent);
 	  		exit(0);
 	  	}
 	  	else
