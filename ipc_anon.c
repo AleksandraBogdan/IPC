@@ -9,117 +9,168 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <time.h>
-#include <sys/sysinfo.h>
 
 #define BUFFER_SIZE 80
-struct sysinfo info;
-
-int randomTime()
-{
-  int time = clock();
-  return time;
-}
-
-int rndmgnrt()
-{
-  //рандом
-  int randTime, randLib, bufferRam, procs;
-  randLib = rand();
-  //uptime = (int)info.uptime;
-  procs = (int)info.procs;
-  bufferRam = (int)info.bufferram;
-  randTime = (int)randomTime();
-  return ((randLib ^ randTime) * (bufferRam ^ procs));
-}
+#define COUNT_OF_GOATS 7
 
 int wolfOrGoat(int live)
 {
-  int A = 1, B = 100;
-  if (!live)
-  {
-    B = 50;
-  }
-  return A + rand() % (B - A + 1);
+	int A = 1, B = 100;
+	if (!live)
+	{
+		B = 50;
+	}
+	return A + rand() % (B - A + 1);
+
+}
+
+void childFunction(int i, int* shared, int status, int seed, sem_t* sem, char* nameSem, sem_t* semParent)
+{
+	while(1)
+	{
+		printf("child func work %i\n", i);
+		srand(seed);
+		shared[i] = wolfOrGoat(status);
+		printf("Goat's number for %i is %i\n", i, shared[i]);
+		sem_wait(sem);
+		sem_post(semParent);
+		printf("end child\n");
+	}
+	exit(0);
+}
+
+
+
+void parentFunction(sem_t* semParent, sem_t* sem[], char* nameSem[], int* shared, int* status)
+{
+	printf("parent func work\n");
+	int count = 0, i, wolf, countOfDeath = 0;
+	while(1)
+	{
+
+		for (i = 0; i < COUNT_OF_GOATS; i++)
+		{ 
+			printf("sem wait\n");
+      		sem_post(sem[i]);//to do with time
+      		sem_wait(semParent);
+ 		}
+  		printf("START GAME\n");
+  		wolf = wolfOrGoat(1);
+  		printf("Wolf's number is %i\n", wolf);
+  		for (i = 0; i < COUNT_OF_GOATS; i++)
+  		{ 
+  			if (status[i])
+  			{
+  				if (abs(shared[i] - wolf) > (70 / COUNT_OF_GOATS))
+  				{
+  					printf("abs > 70:dead\n");
+  					status[i] = 0;
+  				}
+  			}
+  			else
+  			{
+  				if (abs(shared[i] - wolf) < (20 / COUNT_OF_GOATS))
+  				{
+  					printf("abs < 20:alive\n");
+  					status[i] = 1;
+  				}
+  			}
+  		}
+		for (i = 0; i < COUNT_OF_GOATS; i++)
+  		{
+  			printf("check: status is %i\n", status[i]);
+  			count += status[i];
+  		}
+  		if (count == COUNT_OF_GOATS)
+  			++countOfDeath; 
+  		else
+  			countOfDeath = 0;
+
+  		if (countOfDeath >= 2)
+  		{ 
+  			printf("end game");
+  			break;
+  		}
+	}
+	printf("final\n");
+	exit(0);
 
 }
 
 
 int main(void)
 {
-  sysinfo(&info);
-  srand(time(NULL));
-  int pid;
-  void* buf;
-  sem_t* sem;
-  int wolf, countOfGoats = 1, i;
-  int status[1] = {1};// 1- live, 0 -dead
+	srand(time(NULL));
+	pid_t pid;
+  	void* buf;//for mmap
+  	sem_t* sem[COUNT_OF_GOATS], *semParent;// semaphores for every proccess
+  	int i;
+  	char* namesSemaphores[COUNT_OF_GOATS] = {"/sem1","/sem2","/sem3","/sem4","/sem5","/sem6","/sem7"};
+  	int status[COUNT_OF_GOATS] = {1};// 1- live, 0 -dead
+  	int randSeed[COUNT_OF_GOATS + 1];//seeds for every proccess
+  	for (i = 0; i < COUNT_OF_GOATS + 1; i++)
+  	{
+  		randSeed[i] = rand();
+  	}
 
-  buf = mmap(NULL, BUFFER_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);//create a new mapping in the virtual adress space(1 - starting address for mapping(kernel chooses the address), 2 - length of the mapping, 3- desired memory protection(may read, may write), 4 - visible to other proccesses mapping the same region or files(MAP_ANON - mapping is not backed by any files); 5,6 -should be like this because of MAP_ANON)
-  printf("Mapped at %p\n", buf);
-  if (buf == MAP_FAILED)
-  {
-    printf("Something went wrong with mmap...\n");
-  }
-  sem = sem_open("/semsem", O_CREAT | O_EXCL, S_IRWXU, 0);//create or open semaphore(0 - initial value for semaphore)
-  if(sem == SEM_FAILED)
-  {
-    printf("Something went wrong...\n");
-  }
 
+// work with mmap
+  	buf = mmap(NULL, BUFFER_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);//create a new mapping in the virtual adress space(1 - starting address for mapping(kernel chooses the address), 2 - length of the mapping, 3- desired memory protection(may read, may write), 4 - visible to other proccesses mapping the same region or files(MAP_ANON - mapping is not backed by any files); 5,6 -should be like this because of MAP_ANON)
+
+  	if (buf == MAP_FAILED)
+  	{
+  		printf("Something went wrong with mmap...\n");
+ 	}
+
+//work with semaphores
+  	semParent = sem_open("/semParent", O_CREAT, S_IRWXU, 0);//create or open semaphore(0 - initial value for semaphore)
+  	if(semParent == SEM_FAILED)
+	{
+		printf("Something went wrong...\n");
+	}
+	for (i = 0; i < COUNT_OF_GOATS; i++)
+	{
+		sem[i] = sem_open(namesSemaphores[i], O_CREAT, S_IRWXU, 0);
+	  	if(sem[i] == SEM_FAILED)
+	  	{
+	  		printf("Something went wrong...%i semaphores\n", i);
+	  	}
+	}
   
-  int *shared = buf;
-  pid = fork(); //create child proccess
-  if(pid != 0)//parent proccess
-  {
-    sem_wait(sem);// block semaphore
-    wolf = rndmgnrt();
-    printf("wolf = %d\n", wolf);
-    printf("goal = %d\n", shared[0]);
-    for (i = 0; i < countOfGoats; i++)
-    {
-      if (status[i])
-      {
-        if (abs(shared[i] - wolf) < (70 / countOfGoats))
-        {
-          continue;
-        }
-        else
-        {
-          status[i] = 0;
-        }
-      }
-      else
-      {
-        if (abs(shared[i] - wolf) < (20 / countOfGoats))
-        {
-          status[i] = 1;
-        }
-      }
-    }
-    if (munmap(buf, BUFFER_SIZE) == -1) //unmap
-    {
-      printf("Something went wrong with munmap...\n");
-    }
-    sem_close(sem);//close semaphore
-    sem_unlink("/semsem");//remove semaphore
-  }
-  else if(pid == 0)//child proccess
-  {
-    sem = sem_open("/semsem", 0);
-    if(sem == SEM_FAILED)
-    {
-      printf("Something went wrong...\n");
-    }
 
-    //strcpy(buf, "hello\n");
-    shared[0] = rndmgnrt();
-    sem_post(sem);//unblock semaphore
-    sem_close(sem);//close semaphore
-  }
-  else
-  {
-    printf("Fork failed!\n");
-  }
+	int *shared = buf;
+	for(i = 0; i < COUNT_OF_GOATS; i++)
+	{
+		pid = fork();
+	  	if(pid)
+	  	{
+	  		continue;
+	  	}
+	  	else if (!pid)
+	  	{
+	  		childFunction(i, shared, status[i], randSeed[i], sem[i], namesSemaphores[i], semParent);
+	  		exit(0);
+	  	}
+	  	else
+	  	{
+	  		printf("Fork failed.\n");
+	  	}
+	}
+	parentFunction(semParent, sem, namesSemaphores, shared, status);
 
-  return 0;
+	if (munmap(buf, BUFFER_SIZE) == -1) //unmap
+	{
+		printf("Something went wrong with munmap...\n");
+	}
+	sem_close(semParent);
+	sem_unlink("/semParent");
+	for (i = 0; i < COUNT_OF_GOATS; i++)
+	{
+	 	sem_close(sem[i]);
+	 	sem_unlink(namesSemaphores[i]);
+
+	}
+
+	return 0;
 }
+
