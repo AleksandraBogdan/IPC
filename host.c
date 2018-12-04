@@ -10,7 +10,9 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define BUFFER_SIZE 80
+#include "connector.h"
+
+//#define BUFFER_SIZE 80
 #define COUNT_OF_GOATS 7
 
 int wolfOrGoat(int live)
@@ -25,14 +27,18 @@ int wolfOrGoat(int live)
 
 }
 
-void childFunction(int i, int* shared, int* status, int seed, sem_t* sem, char* nameSem, sem_t* semParent)
+void childFunction(int i, int* status, int seed, sem_t* sem, char* nameSem, sem_t* semParent)
 {
+	int goat;
 	while(1)
 	{
+
 		printf("child func work %i\n", i);
 		srand(seed);
-		shared[i] = wolfOrGoat(*status);
-		printf("Goat's number for %i is %i\n", i, shared[i]);
+		goat =  wolfOrGoat(*status);
+		conn_write(i, goat);
+		//shared[i] = wolfOrGoat(*status);//write to mmap
+		printf("Goat's number for %i is %i\n", i, goat);
 		sem_wait(sem);
 		sem_post(semParent);
 		printf("end child\n");
@@ -42,7 +48,7 @@ void childFunction(int i, int* shared, int* status, int seed, sem_t* sem, char* 
 
 
 
-void parentFunction(sem_t* semParent, sem_t* sem[], char* nameSem[], int* shared, int* status)
+void parentFunction(sem_t* semParent, sem_t* sem[], char* nameSem[], int* status)
 {
 	printf("parent func work\n");
 	int count = 0, i, wolf, countOfDeath = 0;
@@ -60,9 +66,11 @@ void parentFunction(sem_t* semParent, sem_t* sem[], char* nameSem[], int* shared
   		printf("Wolf's number is %i\n", wolf);
   		for (i = 0; i < COUNT_OF_GOATS; i++)
   		{ 
+  			//to do read from mmap
   			if (status[i])
   			{
-  				if (abs(shared[i] - wolf) > (70 / COUNT_OF_GOATS))
+  				//if (abs(shared[i] - wolf) > (70 / COUNT_OF_GOATS))
+  				if (abs(conn_read(i) - wolf) > (70 / COUNT_OF_GOATS))
   				{
   					printf("abs > 70:dead\n");
   					status[i] = 0;
@@ -70,7 +78,8 @@ void parentFunction(sem_t* semParent, sem_t* sem[], char* nameSem[], int* shared
   			}
   			else
   			{
-  				if (abs(shared[i] - wolf) < (20 / COUNT_OF_GOATS))
+  				//if (abs(shared[i] - wolf) < (20 / COUNT_OF_GOATS))
+  				if (abs(conn_read(i) - wolf) < (20 / COUNT_OF_GOATS))
   				{
   					printf("abs < 20:alive\n");
   					status[i] = 1;
@@ -89,7 +98,7 @@ void parentFunction(sem_t* semParent, sem_t* sem[], char* nameSem[], int* shared
 
   		if (countOfDeath >= 2)
   		{ 
-  			printf("end game");
+  			printf("end game\n");
   			break;
   		}
 	}
@@ -103,7 +112,7 @@ int main(void)
 {
 	srand(time(NULL));
 	pid_t pid;
-  	void* buf;//for mmap
+  	//void* buf;//for mmap
   	sem_t* sem[COUNT_OF_GOATS], *semParent;// semaphores for every proccess
   	int i;
   	char* namesSemaphores[COUNT_OF_GOATS] = {"/sem1","/sem2","/sem3","/sem4","/sem5","/sem6","/sem7"};
@@ -116,12 +125,14 @@ int main(void)
 
 
 // work with mmap
-  	buf = mmap(NULL, BUFFER_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);//create a new mapping in the virtual adress space(1 - starting address for mapping(kernel chooses the address), 2 - length of the mapping, 3- desired memory protection(may read, may write), 4 - visible to other proccesses mapping the same region or files(MAP_ANON - mapping is not backed by any files); 5,6 -should be like this because of MAP_ANON)
+  	conn_create();
+  	//buf = conn_create();
+  	/*buf = mmap(NULL, BUFFER_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);//create a new mapping in the virtual adress space(1 - starting address for mapping(kernel chooses the address), 2 - length of the mapping, 3- desired memory protection(may read, may write), 4 - visible to other proccesses mapping the same region or files(MAP_ANON - mapping is not backed by any files); 5,6 -should be like this because of MAP_ANON)
 
   	if (buf == MAP_FAILED)
   	{
   		printf("Something went wrong with mmap...\n");
- 	}
+ 	}*/
 
 //work with semaphores
   	semParent = sem_open("/semParent", O_CREAT, S_IRWXU, 0);//create or open semaphore(0 - initial value for semaphore)
@@ -139,7 +150,7 @@ int main(void)
 	}
   
 
-	int *shared = buf;
+	//int *shared = buf;
 	for(i = 0; i < COUNT_OF_GOATS; i++)
 	{
 		pid = fork();
@@ -149,7 +160,7 @@ int main(void)
 	  	}
 	  	else if (!pid)
 	  	{
-	  		childFunction(i, shared, &status[i], randSeed[i], sem[i], namesSemaphores[i], semParent);
+	  		childFunction(i, &status[i], randSeed[i], sem[i], namesSemaphores[i], semParent);
 	  		exit(0);
 	  	}
 	  	else
@@ -157,12 +168,13 @@ int main(void)
 	  		printf("Fork failed.\n");
 	  	}
 	}
-	parentFunction(semParent, sem, namesSemaphores, shared, status);
+	parentFunction(semParent, sem, namesSemaphores, status);
 
-	if (munmap(buf, BUFFER_SIZE) == -1) //unmap
+	/*if (munmap(buf, BUFFER_SIZE) == -1) //unmap
 	{
 		printf("Something went wrong with munmap...\n");
-	}
+	}*/
+	conn_delete(buf);
 	sem_close(semParent);
 	sem_unlink("/semParent");
 	for (i = 0; i < COUNT_OF_GOATS; i++)
