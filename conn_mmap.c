@@ -1,8 +1,10 @@
-
+#include <sys/mman.h>
 #include "connector.h"
 
 #define BUFFER_SIZE 80
 
+static void* buf;
+static int* shared;
 
 void conn_create()
 {
@@ -14,19 +16,21 @@ void conn_create()
   		printf("Something went wrong with mmap...\n");
   		
  	}
+ 	shared = buf;
 }
 
 int conn_read(int index)
 {
-	int* shared = buf;
+	//int* shared = buf;
 	return shared[index];
 
 }
 
 void conn_write(int index, int number)
 {
-	int* shared = buf;
+	//int* shared = buf;
 	shared[index] = number;
+	//printf("shared %i\n", shared[index]);
 }
 
 void conn_delete()
