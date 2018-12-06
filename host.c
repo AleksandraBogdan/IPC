@@ -18,7 +18,7 @@
 //#define BUFFER_SIZE 80
 #define COUNT_OF_GOATS 7
 
-
+//Semaphore wait with timeout 
 void sem_wait_timeout(sem_t* p_sem)
 {
   struct timespec ts;
@@ -46,6 +46,7 @@ void childFunction(int i, int seed, sem_t* sem, char* nameSem, sem_t* semParent)
 	{
 
 		srand(seed);
+		sem_wait(sem);
 		status = conn_read(i);//get status
 		//printf("status %i\n", status);
 		if (status == -1)
@@ -54,7 +55,7 @@ void childFunction(int i, int seed, sem_t* sem, char* nameSem, sem_t* semParent)
 		conn_write(i, goat);
 		//shared[i] = wolfOrGoat(*status);//write to mmap
 		printf("Goat's number for %i is %i\n", i, goat);
-		sem_wait(sem);
+		
 		sem_post(semParent);
 	}
 	exit(0);

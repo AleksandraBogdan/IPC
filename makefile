@@ -1,4 +1,20 @@
+CC=gcc 
+CFLAGS=-Wall -Werror 
+LIBS=-lpthread
+TARGET=host.c 
+EXECUTABLES=$(ALL_TARGETS:./conn_%.c=host_%)
+ALL_TARGETS=$(shell find . -name "conn_*.c")
+
+
+all: $(EXECUTABLES)
 	
-all:
-	gcc -o host_mmap host.c conn_mmap.c -lpthread -lrt
-	#gcc -o host_pipe host.c conn_pipe.c -lpthread -lrt
+host_%: conn_%.o $(TARGET:.c=.o)
+	$(CC) -o $@ $^ $(LIBS)
+
+.c.o:
+	$(CC) $(CFLAGS) -c $< -o $@ 
+
+.PHONY: clean
+
+clean:
+	rm -rf `find . -maxdepth 1 -executable -type f`

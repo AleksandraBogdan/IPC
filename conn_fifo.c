@@ -1,20 +1,21 @@
-
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <fcntl.h>           
-
+#include <fcntl.h> 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <errno.h>
 #include "connector.h"
 #define N 7
-
-static int filedes[2 * N];
+static char* namesFIFO[N] = {"fifo1","fifo2","fifo3","fifo4","fifo5","fifo6","fifo7"};
+static int fd;
 
 void conn_create()
 {
 	int i;
 	for(i = 0; i < N;i++)
 	{
-		if (pipe(&filedes[2  * i]) == -1)
+		if (mkfifo(namesFIFO[i], S_IRWXU ) == -1)
 		{
 			printf("Something wrong with creating pipes\n");
 		}
@@ -26,13 +27,15 @@ void conn_create()
 int conn_read(int index)
 {
 	//close(filedes[2 * index + 1]);
+	fd = open(namesFIFO[index], O_RDONLY | O_NONBLOCK);
 	int value, size;
-	size = read(filedes[2 * index], &value, sizeof(int));
+	size = read(fd, &value, sizeof(int));
 	if (size < 0)
 	{
 		printf("erroe with reading\n");
 	}
 	//close(filedes[2 * index]);
+	close(fd);
 	return value;
 
 }
@@ -40,8 +43,10 @@ int conn_read(int index)
 void conn_write(int index, int number)
 {
 	//close(filedes[2 * index]);
-	write(filedes[2 * index + 1], &number, sizeof(int));
+	fd = open(namesFIFO[index], O_WRONLY | O_NONBLOCK);
+	write(fd, &number, sizeof(int));
 	//close(filedes[2 * index + 1]);
+	close(fd);
 }
 
 void conn_delete()
@@ -49,8 +54,7 @@ void conn_delete()
 	int i;
 	for(i = 0; i < N; i++)
 	{
-		close(filedes[2 * i]);
-		close(filedes[2 * i + 1]);
+		unlink(namesFIFO[i]);
 	}
 	
 }
