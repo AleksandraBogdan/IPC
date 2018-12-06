@@ -1,14 +1,13 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <semaphore.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <string.h>
-#include <sys/mman.h>
 #include <fcntl.h>
-#include <stdlib.h>
-#include <time.h>
+#include <syslog.h>
 #include <time.h>
 #include <math.h>
 #include <errno.h>
@@ -74,7 +73,7 @@ void parentFunction(sem_t* semParent, sem_t* sem[], char* nameSem[])
 		{ 
 			//printf("sem wait\n");
 			conn_write(i,status[i]);
-      		sem_post(sem[i]);//to do with time
+      		sem_post(sem[i]);
       		sem_wait_timeout(semParent);
  		}
   		printf("START GAME\n");
@@ -114,6 +113,7 @@ void parentFunction(sem_t* semParent, sem_t* sem[], char* nameSem[])
   			{
   				status[i] = -1;
   				conn_write(i,status[i]);
+  				sem_post(sem[i]);
   			}
   			printf("end game\n");
   			break;

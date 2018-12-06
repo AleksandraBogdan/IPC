@@ -1,6 +1,6 @@
 CC=gcc 
 CFLAGS=-Wall -Werror 
-LIBS=-lpthread
+LIBS=-lpthread -lrt
 TARGET=host.c 
 EXECUTABLES=$(ALL_TARGETS:./conn_%.c=host_%)
 ALL_TARGETS=$(shell find . -name "conn_*.c")
